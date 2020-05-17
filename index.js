@@ -72,6 +72,7 @@ function main() {
                 password: hash('root')
             }
         ],
+        groups: [],
         sessions: []
     };
 
@@ -114,6 +115,7 @@ function processCmd(state, cmd) {
     try {
         processLogin(state, cmd);
         processCreateUser(state, cmd);
+        processCreateGroup(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -134,6 +136,36 @@ function validateTokenForRoot(state, token) {
 
     if (!(session.user.username === 'root')) {
         throw 'Insufficient permissions';
+    }
+}
+
+function processCreateGroup (state, { type, name, token }) {
+    if (type === 'createGroup') {
+        validateTokenForRoot(state, token);
+
+        state.groups.forEach(g => {
+            if (g.name === name) {
+                throw 'Group name already in use';
+            }
+        })
+
+        let newState = {
+            ...state,
+            groups: [
+                ...state.groups,
+                {
+                    name,
+                    members: []
+                }
+            ]
+        };
+
+        let response = '';
+
+        throw {
+            newState,
+            response
+        };
     }
 }
 
@@ -203,6 +235,7 @@ function parseCmd(txt) {
     try {
         parseLogin(txt);
         parseCreateUser(txt);
+        parseCreateGroup(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -260,6 +293,26 @@ function parseCreateUser(txt) {
 
         throw {
             cmd: { type: 'createUser', username, password, confirmPassword, email, token }
+        };
+    }
+}
+
+// * - createGroup (name) (token)
+// * -- Returns OK | NOK "Invalid name" | NOK "Name already in use" | NOK "Invalid token" | NOK "Insufficient permissions"
+function parseCreateGroup (txt) {
+    if (txt.startsWith('createGroup')) {
+        let [ _, name, token ] = txt.split(' ');
+
+        if (!name || !name.length) {
+            throw 'Invalid group name';
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'createGroup', name, token }
         };
     }
 }
