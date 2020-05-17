@@ -69,23 +69,29 @@ function main() {
         users: [
             {
                 username: 'root',
-                password: 'root'
+                password: hash('root')
             }
         ],
         sessions: []
     };
 
     process.stdin.on('data', (txt) => {
-        try {
-            let [ sockId, ...rest] = txt.trim().split(' ');
+        let [sockId, ...rest] = txt.trim().split(' ');
 
-            let cmds = parseCmds(rest.join(' '));
-            let { newState, response } = processCmds(state, cmds);
-            state = newState;
+        if (sockId === 'log') {
+            console.log();
+            console.log(JSON.stringify(state, null, 4));
+            console.log();
+        } else {
+            try {
+                let cmds = parseCmds(rest.join(' '));
+                let { newState, response } = processCmds(state, cmds);
+                state = newState;
 
-            console.log(`${sockId} OK ${response}`);
-        } catch (err) {
-            console.log(`${sockId} NOK ${err}`);
+                console.log(`${sockId} OK ${response}`);
+            } catch (err) {
+                console.log(`${sockId} NOK ${err}`);
+            }
         }
     })
 }
@@ -104,9 +110,10 @@ function processCmds(state, cmds) {
     return { newState, response };
 }
 
-function processCmd (state, cmd) {
+function processCmd(state, cmd) {
     try {
         processLogin(state, cmd);
+        processCreateUser(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -115,36 +122,87 @@ function processCmd (state, cmd) {
         throw result;
     }
 
-    throw 'Command not implemented';
+    throw `Command not implemented (${cmd.type})`;
 }
 
-function processLogin (state, { username, password }) {
-    let user = state.users.find(u => (u.username === username) && (u.password === password));
+function validateTokenForRoot(state, token) {
+    let session = state.sessions.find(s => s.token === token);
 
-    if (!user) {
-        throw 'Invalid username/password';
+    if (!session) {
+        throw 'Invalid token';
     }
 
-    let token = hash(password + Math.random());
-
-    let newState = {
-        ...state,
-        sessions: [ ...state.sessions, { user, token } ]
-    };
-
-    throw {
-        newState,
-        response: token
-    };
+    if (!(session.user.username === 'root')) {
+        throw 'Insufficient permissions';
+    }
 }
 
-function parseCmds (txt) {
+function processCreateUser(state, { type, username, password, confirmPassword, email, token }) {
+    if (type === 'createUser') {
+        validateTokenForRoot(state, token);
+
+        state.users.forEach(u => {
+            if (u.username === 'username') {
+                throw 'Username already in use';
+            }
+
+            if (u.email === email) {
+                throw 'Email already in use';
+            }
+        });
+
+        if (password !== confirmPassword) {
+            throw `Passwords don't match`;
+        }
+
+        let newState = {
+            ...state,
+            users: [...state.users, {
+                username,
+                email,
+                password: hash(password)
+            }]
+        };
+
+        let response = '';
+
+        throw {
+            newState,
+            response
+        };
+    }
+}
+
+function processLogin(state, { type, username, password }) {
+    if (type === 'login') {
+        let user = state.users.find(u => (u.username === username) && (u.password === hash(password)));
+
+        if (!user) {
+            throw 'Invalid username/password';
+        }
+
+        let token = hash(password + Math.random());
+
+        let newState = {
+            ...state,
+            sessions: [...state.sessions, { user, token }]
+        };
+
+        throw {
+            newState,
+            response: token
+        };
+    }
+}
+
+function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
 
-function parseCmd (txt) {
+function parseCmd(txt) {
     try {
         parseLogin(txt);
+        parseCreateUser(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -156,9 +214,9 @@ function parseCmd (txt) {
     throw `Invalid command ${txt}`;
 }
 
-function parseLogin (txt) {
+function parseLogin(txt) {
     if (txt.startsWith('login')) {
-        let [ _, username, password ] = txt.split(' ');
+        let [_, username, password] = txt.split(' ');
 
         if (!username || !username.length) {
             throw 'Invalid username'
@@ -170,6 +228,38 @@ function parseLogin (txt) {
 
         throw {
             cmd: { type: 'login', username, password }
+        };
+    }
+}
+
+// * - createUser (username) (password) (confirmPassword) (email) (token)
+// * -- Returns OK | NOK "Username already in use" | NOK "Invalid username" | NOK "Invalid password" | NOK "Invalid email" | NOK "Email already in use"
+function parseCreateUser(txt) {
+    if (txt.startsWith('createUser')) {
+        let [_, username, password, confirmPassword, email, token] = txt.split(' ');
+
+        if (!username || !username.length) {
+            throw 'Invalid username'
+        }
+
+        if (!password || !password.length) {
+            throw 'Invalid password'
+        }
+
+        if (!confirmPassword || !confirmPassword.length) {
+            throw 'Invalid password confirmation'
+        }
+
+        if (!email || !email.length) {
+            throw 'Invalid email'
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'createUser', username, password, confirmPassword, email, token }
         };
     }
 }
