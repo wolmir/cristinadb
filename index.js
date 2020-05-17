@@ -117,6 +117,7 @@ function processCmd(state, cmd) {
         processCreateUser(state, cmd);
         processCreateGroup(state, cmd);
         processAddUserToGroup(state, cmd);
+        processRemoveUserFromGroup(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -280,6 +281,42 @@ function processAddUserToGroup (state, { type, username, groupName, token }) {
     }
 }
 
+function processRemoveUserFromGroup (state, { type, username, groupName, token }) {
+    if (type === 'removeUserFromGroup') {
+        validateTokenForRoot(state, token);
+        validateGroup(state, groupName);
+        validateUser(state, username);
+        
+        let group = state.groups.find(g => g.name === groupName);
+
+        let user = group.members.find(un => un === username);
+
+        if (!user) {
+            throw `User ${username} is not a member of group ${groupName}`;
+        }
+
+        let newState = {
+            ...state,
+            groups: state.groups.map(g => {
+                if (g.name === groupName) {
+                    return {
+                        ...g,
+                        members: g.members.filter(un => un !== username)
+                    };
+                }
+
+                return g;
+            })
+        };
+
+        let response = '';
+
+        throw {
+            newState, response
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -290,6 +327,7 @@ function parseCmd(txt) {
         parseCreateUser(txt);
         parseCreateGroup(txt);
         parseAddUserToGroup(txt);
+        parseRemoveUserFromGroup(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -391,6 +429,30 @@ function parseAddUserToGroup (txt) {
 
         throw {
             cmd: { type: 'addUserToGroup', username, groupName, token }
+        };
+    }
+}
+
+//* - removeUserFromGroup (username) (groupName) (token)
+//* -- Returns OK | NOK "Invalid username" | NOK "Invalid group name" | NOK "Invalid token" | NOK "Insufficient permissions"
+function parseRemoveUserFromGroup (txt) {
+    if (txt.startsWith('removeUserFromGroup')) {
+        let [ _, username, groupName, token ] = txt.split(' ');
+
+        if (!username || !username.length) {
+            throw 'Invalid username';
+        }
+
+        if (!groupName || !groupName.length) {
+            throw 'Invalid group name';
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'removeUserFromGroup', username, groupName, token }
         };
     }
 }
