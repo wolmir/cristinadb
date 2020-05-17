@@ -116,6 +116,7 @@ function processCmd(state, cmd) {
         processLogin(state, cmd);
         processCreateUser(state, cmd);
         processCreateGroup(state, cmd);
+        processAddUserToGroup(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -227,6 +228,58 @@ function processLogin(state, { type, username, password }) {
     }
 }
 
+function validateGroup (state, groupName) {
+    let group = state.groups.find(g => g.name === groupName);
+
+    if (!group) {
+        throw 'Invalid group';
+    }
+}
+
+function validateUser (state, username) {
+    let user = state.users.find(g => g.username === username);
+
+    if (!user) {
+        throw 'Invalid user';
+    }
+}
+
+function processAddUserToGroup (state, { type, username, groupName, token }) {
+    if (type === 'addUserToGroup') {
+        validateTokenForRoot(state, token);
+        validateGroup(state, groupName);
+        validateUser(state, username);
+        
+        let group = state.groups.find(g => g.name === groupName);
+
+        group.members.forEach(un => {
+            if (un === username) {
+                throw `User ${username} is already a member of group ${groupName}`;
+            }
+        });
+
+        let newState = {
+            ...state,
+            groups: state.groups.map(g => {
+                if (g.name === groupName) {
+                    return {
+                        ...g,
+                        members: [ ...g.members, username ]
+                    };
+                }
+
+                return g;
+            })
+        };
+
+        let response = '';
+
+        throw {
+            newState, response
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -236,6 +289,7 @@ function parseCmd(txt) {
         parseLogin(txt);
         parseCreateUser(txt);
         parseCreateGroup(txt);
+        parseAddUserToGroup(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -313,6 +367,30 @@ function parseCreateGroup (txt) {
 
         throw {
             cmd: { type: 'createGroup', name, token }
+        };
+    }
+}
+
+//* - addUserToGroup (username) (groupName) (token)
+//* -- Returns OK | NOK "Invalid username" | NOK "Invalid group name" | NOK "Invalid token" | NOK "Insufficient permissions"
+function parseAddUserToGroup (txt) {
+    if (txt.startsWith('addUserToGroup')) {
+        let [ _, username, groupName, token ] = txt.split(' ');
+
+        if (!username || !username.length) {
+            throw 'Invalid username';
+        }
+
+        if (!groupName || !groupName.length) {
+            throw 'Invalid group name';
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'addUserToGroup', username, groupName, token }
         };
     }
 }
