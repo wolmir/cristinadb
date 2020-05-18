@@ -130,6 +130,7 @@ function processCmd(state, cmd) {
         processAddUserToGroup(state, cmd);
         processRemoveUserFromGroup(state, cmd);
         processCreateThing(state, cmd);
+        processReadThing(state, cmd)
     } catch (result) {
         if (result.newState) {
             return result;
@@ -426,6 +427,75 @@ function processCreateThing(state, { type, pathName, data, token }) {
     }
 }
 
+function validateUserThingReadPermissions(state, thing, user) {
+    if (user.username === thing.owner) {
+        if (!thing.permissions.owner.read) {
+            throw 'Insufficient permissions';
+        }
+    } else {
+        if (!thing.group) {
+            throw 'Insufficient permissions';
+        }
+
+        let group = state.groups.find(g => g.name === thing.group);
+
+        if (!group) {
+            throw 'Insufficient permissions';
+        }
+
+        if (group.members.includes(user.username)) {
+            if (!thing.permissions.group.read) {
+                throw 'Insufficient permissions';
+            }
+        } else {
+            throw 'Insufficient permissions';
+        }
+    }
+}
+
+function readThing(state, thing, user, pathName) {
+    validateUserThingReadPermissions(state, thing, user);
+
+    if (pathName.length === 0) {
+        return {
+            data: thing.data,
+            name: thing.name,
+            children: thing.children
+                .map(child => {
+                    try {
+                        return readThing(state, child, user, pathName);
+                    } catch (error) {
+                        return null;
+                    }
+                })
+                .filter(c => c !== null)
+        };
+    }
+
+    let [name, ...rest] = pathName;
+
+    let otherThing = thing.children.find(t => t.name === name);
+
+    if (!otherThing) {
+        throw 'Invalid path name';
+    }
+
+    return readThing(state, otherThing, user, rest);
+}
+
+function processReadThing(state, { type, pathName, token }) {
+    if (type === 'readThing') {
+        let user = validateToken(state, token);
+
+        let response = JSON.stringify(readThing(state, state.mainThing, user, pathName.split('/')));
+
+        throw {
+            newState: { ...state },
+            response
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -438,6 +508,7 @@ function parseCmd(txt) {
         parseAddUserToGroup(txt);
         parseRemoveUserFromGroup(txt);
         parseCreateThing(txt);
+        parseReadThing(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -590,5 +661,26 @@ function parseCreateThing(txt) {
         };
     }
 }
+
+//* - readThing (pathName) (token)
+//* -- Returns OK "{ data: (data), children: [...(chidren read results)] }" | NOK "Invalid path name" | NOK "Invalid token" | NOK "Insufficient permissions"
+function parseReadThing(txt) {
+    if (txt.startsWith('readThing')) {
+        let [_, pathName, token] = txt.split(' ');
+
+        if (!pathName || !pathName.length) {
+            throw 'Invalid path name';
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'readThing', pathName, token }
+        };
+    }
+}
+
 
 main()
