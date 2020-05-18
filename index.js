@@ -73,7 +73,18 @@ function main() {
             }
         ],
         groups: [],
-        sessions: []
+        sessions: [],
+        mainThing: {
+            name: 'mainThing',
+            children: [],
+            data: null,
+            owner: 'root',
+            group: null,
+            permissions: {
+                owner: { read: true, write: true },
+                group: { read: false, write: false }
+            }
+        }
     };
 
     process.stdin.on('data', (txt) => {
@@ -118,6 +129,7 @@ function processCmd(state, cmd) {
         processCreateGroup(state, cmd);
         processAddUserToGroup(state, cmd);
         processRemoveUserFromGroup(state, cmd);
+        processCreateThing(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -141,7 +153,7 @@ function validateTokenForRoot(state, token) {
     }
 }
 
-function processCreateGroup (state, { type, name, token }) {
+function processCreateGroup(state, { type, name, token }) {
     if (type === 'createGroup') {
         validateTokenForRoot(state, token);
 
@@ -229,7 +241,7 @@ function processLogin(state, { type, username, password }) {
     }
 }
 
-function validateGroup (state, groupName) {
+function validateGroup(state, groupName) {
     let group = state.groups.find(g => g.name === groupName);
 
     if (!group) {
@@ -237,7 +249,7 @@ function validateGroup (state, groupName) {
     }
 }
 
-function validateUser (state, username) {
+function validateUser(state, username) {
     let user = state.users.find(g => g.username === username);
 
     if (!user) {
@@ -245,12 +257,12 @@ function validateUser (state, username) {
     }
 }
 
-function processAddUserToGroup (state, { type, username, groupName, token }) {
+function processAddUserToGroup(state, { type, username, groupName, token }) {
     if (type === 'addUserToGroup') {
         validateTokenForRoot(state, token);
         validateGroup(state, groupName);
         validateUser(state, username);
-        
+
         let group = state.groups.find(g => g.name === groupName);
 
         group.members.forEach(un => {
@@ -265,7 +277,7 @@ function processAddUserToGroup (state, { type, username, groupName, token }) {
                 if (g.name === groupName) {
                     return {
                         ...g,
-                        members: [ ...g.members, username ]
+                        members: [...g.members, username]
                     };
                 }
 
@@ -281,12 +293,12 @@ function processAddUserToGroup (state, { type, username, groupName, token }) {
     }
 }
 
-function processRemoveUserFromGroup (state, { type, username, groupName, token }) {
+function processRemoveUserFromGroup(state, { type, username, groupName, token }) {
     if (type === 'removeUserFromGroup') {
         validateTokenForRoot(state, token);
         validateGroup(state, groupName);
         validateUser(state, username);
-        
+
         let group = state.groups.find(g => g.name === groupName);
 
         let user = group.members.find(un => un === username);
@@ -317,6 +329,103 @@ function processRemoveUserFromGroup (state, { type, username, groupName, token }
     }
 }
 
+function validateToken(state, token) {
+    let session = state.sessions.find(s => s.token === token);
+
+    if (!session) {
+        throw 'Invalid token';
+    }
+
+    return session.user;
+}
+
+function createThing(state, parentThing, user, pathName, data) {
+    let [name, ...rest] = pathName;
+
+    let otherThing = parentThing.children.find(t => t.name === name);
+
+    if (pathName.length === 1) {
+        if (otherThing) {
+            throw 'Invalid path name';
+        }
+
+        let owner = parentThing.owner;
+
+        if (user.username === owner) {
+            if (!parentThing.permissions.owner.write) {
+                throw 'Insufficient permissions';
+            }
+        } else {
+            let groupName = parentThing.group;
+
+            if (!groupName) {
+                throw 'Insufficient permissions';
+            }
+
+            let group = state.groups.find(g => g.name === groupName);
+
+            if (!group) {
+                throw 'Insufficient permissions';
+            }
+
+            if (!group.members.includes(user.username)) {
+                throw 'Insufficient permissions';
+            }
+
+            if (!parentThing.permissions.group.write) {
+                throw 'Insufficient permissions';
+            }
+        }
+
+
+        return {
+            ...parentThing,
+            children: [
+                ...parentThing.children,
+                {
+                    name: pathName[0],
+                    owner: user.username,
+                    group: null,
+                    data,
+                    children: [],
+                    permissions: {
+                        owner: { read: true, write: true },
+                        group: { read: false, write: false }
+                    }
+                }
+            ]
+        }
+    }
+
+    if (!otherThing) {
+        throw 'Invalid path name';
+    }
+
+    return {
+        ...parentThing,
+        children: parentThing.children
+            .filter(c => c.name !== otherThing.name)
+            .concat([ createThing(state, otherThing, user, rest, data) ])
+    };
+}
+
+function processCreateThing(state, { type, pathName, data, token }) {
+    if (type === 'createThing') {
+        let user = validateToken(state, token);
+
+        let newState = {
+            ...state,
+            mainThing: createThing(state, state.mainThing, user, pathName.split('/'), data)
+        };
+
+        let response = '';
+
+        throw {
+            newState, response
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -328,6 +437,7 @@ function parseCmd(txt) {
         parseCreateGroup(txt);
         parseAddUserToGroup(txt);
         parseRemoveUserFromGroup(txt);
+        parseCreateThing(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -391,9 +501,9 @@ function parseCreateUser(txt) {
 
 // * - createGroup (name) (token)
 // * -- Returns OK | NOK "Invalid name" | NOK "Name already in use" | NOK "Invalid token" | NOK "Insufficient permissions"
-function parseCreateGroup (txt) {
+function parseCreateGroup(txt) {
     if (txt.startsWith('createGroup')) {
-        let [ _, name, token ] = txt.split(' ');
+        let [_, name, token] = txt.split(' ');
 
         if (!name || !name.length) {
             throw 'Invalid group name';
@@ -411,9 +521,9 @@ function parseCreateGroup (txt) {
 
 //* - addUserToGroup (username) (groupName) (token)
 //* -- Returns OK | NOK "Invalid username" | NOK "Invalid group name" | NOK "Invalid token" | NOK "Insufficient permissions"
-function parseAddUserToGroup (txt) {
+function parseAddUserToGroup(txt) {
     if (txt.startsWith('addUserToGroup')) {
-        let [ _, username, groupName, token ] = txt.split(' ');
+        let [_, username, groupName, token] = txt.split(' ');
 
         if (!username || !username.length) {
             throw 'Invalid username';
@@ -435,9 +545,9 @@ function parseAddUserToGroup (txt) {
 
 //* - removeUserFromGroup (username) (groupName) (token)
 //* -- Returns OK | NOK "Invalid username" | NOK "Invalid group name" | NOK "Invalid token" | NOK "Insufficient permissions"
-function parseRemoveUserFromGroup (txt) {
+function parseRemoveUserFromGroup(txt) {
     if (txt.startsWith('removeUserFromGroup')) {
-        let [ _, username, groupName, token ] = txt.split(' ');
+        let [_, username, groupName, token] = txt.split(' ');
 
         if (!username || !username.length) {
             throw 'Invalid username';
@@ -453,6 +563,30 @@ function parseRemoveUserFromGroup (txt) {
 
         throw {
             cmd: { type: 'removeUserFromGroup', username, groupName, token }
+        };
+    }
+}
+
+// * - createThing (pathName) (data) (token)
+// * -- Returns OK | NOK "Invalid path name" | NOK "Invalid token" | NOK "Insufficient permissions"
+function parseCreateThing(txt) {
+    if (txt.startsWith('createThing')) {
+        let [_, pathName, data, token] = txt.split(' ');
+
+        if (!pathName || !pathName.length) {
+            throw 'Invalid path name';
+        }
+
+        if (!data || !data.length) {
+            throw 'Invalid data';
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'createThing', pathName, data, token }
         };
     }
 }
