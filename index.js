@@ -136,6 +136,7 @@ function processCmd(state, cmd) {
         processChangeOwner(state, cmd);
         processChangeGroup(state, cmd);
         processChangePermissions(state, cmd);
+        processDeleteThing(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -505,6 +506,12 @@ function validateUserThingPermisions(state, user, thing, operation) {
     }
 }
 
+function validateUserThingPermisionsDeep(state, user, thing, operation) {
+    validateUserThingPermisions(state, user, thing, operation);
+
+    thing.children.forEach(child => validateUserThingPermisionsDeep(state, user, child, operation));
+}
+
 function findThing(state, thing, user, pathName) {
     if (pathName.length === 0) {
         return thing;
@@ -643,6 +650,28 @@ function processChangePermissions(state, { type, pathName, who, permission, toke
     }
 }
 
+function processDeleteThing(state, { type, pathName, token }) {
+    if (type === 'deleteThing') {
+        let user = validateToken(state, token);
+
+        let splitPath = pathName.split('/');
+        let thing = findThing(state, state.mainThing, user, splitPath);
+        let parentThing = findThing(state, state.mainThing, user, splitPath.slice(0, splitPath.length - 1));
+
+        validateUserThingPermisions(state, user, thing, 'write');
+        validateUserThingPermisions(state, user, parentThing, 'write');
+
+        validateUserThingPermisionsDeep(state, user, thing, 'write');
+
+        parentThing.children = parentThing.children.filter(c => c.name !== thing.name);
+
+        return {
+            newState: state,
+            response: ''
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -661,6 +690,7 @@ function parseCmd(txt) {
         parseChangeOwner(txt);
         parseChangeGroup(txt);
         parseChangePermissions(txt);
+        parseDeleteThing(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -948,6 +978,24 @@ function parseChangePermissions(txt) {
 
         throw {
             cmd: { type: 'changePermissions', pathName, who, permission, token }
+        };
+    }
+}
+
+function parseDeleteThing(txt) {
+    if (txt.startsWith('deleteThing')) {
+        let [_, pathName, token] = txt.split(' ');
+
+        if (!pathName || !pathName.length) {
+            throw 'Invalid path name';
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'deleteThing', pathName, token }
         };
     }
 }
