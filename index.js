@@ -133,6 +133,7 @@ function processCmd(state, cmd) {
         processReadThing(state, cmd);
         processEditThingData(state, cmd);
         processMoveChild(state, cmd);
+        processChangeOwner(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -408,7 +409,7 @@ function createThing(state, parentThing, user, pathName, data) {
         ...parentThing,
         children: parentThing.children
             .filter(c => c.name !== otherThing.name)
-            .concat([ createThing(state, otherThing, user, rest, data) ])
+            .concat([createThing(state, otherThing, user, rest, data)])
     };
 }
 
@@ -507,7 +508,9 @@ function findThing(state, thing, user, pathName) {
         return thing;
     }
 
-    validateUserThingPermisions(state, user, thing, 'read');
+    if (user) {
+        validateUserThingPermisions(state, user, thing, 'read');
+    } // Otherwise, it's root
 
     let [name, ...rest] = pathName;
 
@@ -562,6 +565,27 @@ function processMoveChild(state, { type, pathName, newPathName, token }) {
     }
 }
 
+function processChangeOwner(state, { type, pathName, username, token }) {
+    if (type === 'changeOwner') {
+        validateTokenForRoot(state, token);
+
+        let user = state.users.find(u => u.username === username);
+
+        if (!user) {
+            throw 'User not found';
+        }
+
+        let thing = findThing(state, state.mainThing, null, pathName.split('/'));
+
+        thing.owner = username;
+
+        throw {
+            newState: state,
+            response: ''
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -577,6 +601,7 @@ function parseCmd(txt) {
         parseReadThing(txt);
         parseEditThingData(txt);
         parseMoveChild(txt);
+        parseChangeOwner(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -772,11 +797,35 @@ function parseEditThingData(txt) {
     }
 }
 
+//* - changeOwnerUser (pathName) (username) (token)
+//* -- Returns OK | NOK "Invalid path name" | NOK "Invalid user" | NOK "Invalid token" | NOK "Insufficient permissions"
+function parseChangeOwner(txt) {
+    if (txt.startsWith('changeOwner')) {
+        let [_, pathName, username, token] = txt.split(' ');
+
+        if (!pathName || !pathName.length) {
+            throw 'Invalid path name';
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        if (!username || !username.length) {
+            throw 'Invalid username'
+        }
+
+        throw {
+            cmd: { type: 'changeOwner', pathName, username, token }
+        };
+    }
+}
+
 //* - moveChild [(pathName) | (index)] (newPathName) (token)
 //* -- Returns OK | NOK "Invalid child" | NOK "Invalid path name" | NOK "Invalid token" | NOK "Insufficient permissions"
-function parseMoveChild (txt) {
+function parseMoveChild(txt) {
     if (txt.startsWith('moveChild')) {
-        let [_, pathName, newPathName, token ] = txt.split(' ');
+        let [_, pathName, newPathName, token] = txt.split(' ');
 
         if (!pathName || !pathName.length) {
             throw 'Invalid path name';
