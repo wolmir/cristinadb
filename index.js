@@ -130,7 +130,8 @@ function processCmd(state, cmd) {
         processAddUserToGroup(state, cmd);
         processRemoveUserFromGroup(state, cmd);
         processCreateThing(state, cmd);
-        processReadThing(state, cmd)
+        processReadThing(state, cmd);
+        processEditThingData(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -428,29 +429,7 @@ function processCreateThing(state, { type, pathName, data, token }) {
 }
 
 function validateUserThingReadPermissions(state, thing, user) {
-    if (user.username === thing.owner) {
-        if (!thing.permissions.owner.read) {
-            throw 'Insufficient permissions';
-        }
-    } else {
-        if (!thing.group) {
-            throw 'Insufficient permissions';
-        }
-
-        let group = state.groups.find(g => g.name === thing.group);
-
-        if (!group) {
-            throw 'Insufficient permissions';
-        }
-
-        if (group.members.includes(user.username)) {
-            if (!thing.permissions.group.read) {
-                throw 'Insufficient permissions';
-            }
-        } else {
-            throw 'Insufficient permissions';
-        }
-    }
+    validateUserThingPermisions(state, user, thing, 'read');
 }
 
 function readThing(state, thing, user, pathName) {
@@ -496,6 +475,67 @@ function processReadThing(state, { type, pathName, token }) {
     }
 }
 
+function validateUserThingPermisions(state, user, thing, operation) {
+    if (user.username === thing.owner) {
+        if (!thing.permissions.owner[operation]) {
+            throw 'Insufficient permissions';
+        }
+    } else {
+        if (!thing.group) {
+            throw 'Insufficient permissions';
+        }
+
+        let group = state.groups.find(g => g.name === thing.group);
+
+        if (!group) {
+            throw 'Insufficient permissions';
+        }
+
+        if (group.members.includes(user.username)) {
+            if (!thing.permissions.group[operation]) {
+                throw 'Insufficient permissions';
+            }
+        } else {
+            throw 'Insufficient permissions';
+        }
+    }
+}
+
+function findThing(state, thing, user, pathName) {
+    if (pathName.length === 0) {
+        return thing;
+    }
+
+    validateUserThingPermisions(state, user, thing, 'read');
+
+    let [name, ...rest] = pathName;
+
+    let otherThing = thing.children.find(t => t.name === name);
+
+    if (!otherThing) {
+        throw 'Invalid path name';
+    }
+
+    return findThing(state, otherThing, user, rest);
+}
+
+function processEditThingData(state, { type, pathName, data, token }) {
+    if (type === 'editThingData') {
+        let user = validateToken(state, token);
+
+        let thing = findThing(state, state.mainThing, user, pathName.split('/'));
+
+        validateUserThingPermisions(state, user, thing, 'write');
+
+        thing.data = data;
+
+        throw {
+            newState: state,
+            response: ''
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -509,6 +549,7 @@ function parseCmd(txt) {
         parseRemoveUserFromGroup(txt);
         parseCreateThing(txt);
         parseReadThing(txt);
+        parseEditThingData(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -678,6 +719,28 @@ function parseReadThing(txt) {
 
         throw {
             cmd: { type: 'readThing', pathName, token }
+        };
+    }
+}
+
+function parseEditThingData(txt) {
+    if (txt.startsWith('editThingData')) {
+        let [_, pathName, data, token] = txt.split(' ');
+
+        if (!pathName || !pathName.length) {
+            throw 'Invalid path name';
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        if (!data || !data.length) {
+            throw 'Invalid data'
+        }
+
+        throw {
+            cmd: { type: 'editThingData', pathName, data, token }
         };
     }
 }
