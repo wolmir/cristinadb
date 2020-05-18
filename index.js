@@ -132,6 +132,7 @@ function processCmd(state, cmd) {
         processCreateThing(state, cmd);
         processReadThing(state, cmd);
         processEditThingData(state, cmd);
+        processMoveChild(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -536,6 +537,31 @@ function processEditThingData(state, { type, pathName, data, token }) {
     }
 }
 
+function processMoveChild(state, { type, pathName, newPathName, token }) {
+    if (type === 'moveChild') {
+        let user = validateToken(state, token);
+
+        let splitPath = pathName.split('/');
+        let parentPath = splitPath.slice(0, splitPath.length - 1);
+        let destinationPath = newPathName.split('/');
+
+        let origin = findThing(state, state.mainThing, user, parentPath);
+        let thing = findThing(state, state.mainThing, user, splitPath);
+        let destination = findThing(state, state.mainThing, user, destinationPath);
+
+        validateUserThingPermisions(state, user, origin, 'write');
+        validateUserThingPermisions(state, user, destination, 'write');
+
+        origin.children = origin.children.filter(t => t.name !== thing.name);
+        destination.children = destination.children.concat([thing]);
+
+        throw {
+            newState: state,
+            response: ''
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -550,6 +576,7 @@ function parseCmd(txt) {
         parseCreateThing(txt);
         parseReadThing(txt);
         parseEditThingData(txt);
+        parseMoveChild(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -741,6 +768,30 @@ function parseEditThingData(txt) {
 
         throw {
             cmd: { type: 'editThingData', pathName, data, token }
+        };
+    }
+}
+
+//* - moveChild [(pathName) | (index)] (newPathName) (token)
+//* -- Returns OK | NOK "Invalid child" | NOK "Invalid path name" | NOK "Invalid token" | NOK "Insufficient permissions"
+function parseMoveChild (txt) {
+    if (txt.startsWith('moveChild')) {
+        let [_, pathName, newPathName, token ] = txt.split(' ');
+
+        if (!pathName || !pathName.length) {
+            throw 'Invalid path name';
+        }
+
+        if (!newPathName || !newPathName.length) {
+            throw 'Invalid destination name'
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'moveChild', pathName, newPathName, token }
         };
     }
 }
