@@ -135,6 +135,7 @@ function processCmd(state, cmd) {
         processMoveChild(state, cmd);
         processChangeOwner(state, cmd);
         processChangeGroup(state, cmd);
+        processChangePermissions(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -608,6 +609,40 @@ function processChangeGroup(state, { type, pathName, groupName, token }) {
     }
 }
 
+function processChangePermissions(state, { type, pathName, who, permission, token }) {
+    if (type === 'changePermissions') {
+        validateTokenForRoot(state, token);
+
+        let thing = findThing(state, state.mainThing, null, pathName.split('/'));
+
+        switch (permission) {
+            case '+r':
+                thing.permissions[who].read = true;
+                break;
+
+            case '-r':
+                thing.permissions[who].read = false;
+                break;
+
+            case '+w':
+                thing.permissions[who].write = true;
+                break;
+
+            case '-w':
+                thing.permissions[who].write = false;
+                break;
+
+            default:
+                throw 'Invalid permission flag'
+        }
+
+        throw {
+            newState: state,
+            response: ''
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -625,6 +660,7 @@ function parseCmd(txt) {
         parseMoveChild(txt);
         parseChangeOwner(txt);
         parseChangeGroup(txt);
+        parseChangePermissions(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -886,6 +922,32 @@ function parseMoveChild(txt) {
 
         throw {
             cmd: { type: 'moveChild', pathName, newPathName, token }
+        };
+    }
+}
+
+function parseChangePermissions(txt) {
+    if (txt.startsWith('changePermissions')) {
+        let [_, pathName, who, permission, token] = txt.split(' ');
+
+        if (!pathName || !pathName.length) {
+            throw 'Invalid path name';
+        }
+
+        if (!who || !who.length || !(['group', 'owner'].includes(who))) {
+            throw 'Invalid subject'
+        }
+
+        if (!permission || !permission.length || !(['+r', '-r', '+w', '-w'].includes(permission))) {
+            throw 'Invalid permission'
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'changePermissions', pathName, who, permission, token }
         };
     }
 }
