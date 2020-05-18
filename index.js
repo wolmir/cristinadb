@@ -134,6 +134,7 @@ function processCmd(state, cmd) {
         processEditThingData(state, cmd);
         processMoveChild(state, cmd);
         processChangeOwner(state, cmd);
+        processChangeGroup(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -586,6 +587,27 @@ function processChangeOwner(state, { type, pathName, username, token }) {
     }
 }
 
+function processChangeGroup(state, { type, pathName, groupName, token }) {
+    if (type === 'changeGroup') {
+        validateTokenForRoot(state, token);
+
+        let group = state.groups.find(u => u.name === groupName);
+
+        if (!group) {
+            throw 'Group not found';
+        }
+
+        let thing = findThing(state, state.mainThing, null, pathName.split('/'));
+
+        thing.group = groupName;
+
+        throw {
+            newState: state,
+            response: ''
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -602,6 +624,7 @@ function parseCmd(txt) {
         parseEditThingData(txt);
         parseMoveChild(txt);
         parseChangeOwner(txt);
+        parseChangeGroup(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -817,6 +840,28 @@ function parseChangeOwner(txt) {
 
         throw {
             cmd: { type: 'changeOwner', pathName, username, token }
+        };
+    }
+}
+
+function parseChangeGroup(txt) {
+    if (txt.startsWith('changeGroup')) {
+        let [_, pathName, groupName, token] = txt.split(' ');
+
+        if (!pathName || !pathName.length) {
+            throw 'Invalid path name';
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        if (!groupName || !groupName.length) {
+            throw 'Invalid group name'
+        }
+
+        throw {
+            cmd: { type: 'changeGroup', pathName, groupName, token }
         };
     }
 }
