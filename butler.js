@@ -10,7 +10,11 @@ function main() {
         port: 1234
     }, () => {
         socket.on('data', (data) => {
-            console.log(data.toString('utf8'));
+            let txt = (data.toString('utf8').trim());
+
+            if (txt.startsWith(id)) {
+                console.log(txt);
+            }
         });
 
         socket.on('end', () => {
@@ -18,7 +22,7 @@ function main() {
         });
 
         process.stdin.on('data', (data) => {
-            socket.write(data);
+            socket.write(`${id} ${data}`);
         });
     });
 }
