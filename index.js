@@ -69,6 +69,7 @@ function main() {
     process.stdin.setEncoding('utf8');
 
     let state = {
+        mode: 'active',
         users: [
             {
                 username: 'root',
@@ -112,7 +113,9 @@ function main() {
         } else {
             try {
                 let cmds = parseCmds(rest.join(' '));
+
                 let { newState, response } = processCmds(state, cmds);
+
                 state = newState;
 
                 console.log(`${sockId} OK ${response}`);
@@ -142,6 +145,15 @@ function processCmds(state, cmds) {
 function processCmd(state, cmd) {
     try {
         processLogin(state, cmd);
+
+        if (state.mode === 'maintenance') {
+            try {
+                validateTokenForRoot(state, cmd.token);
+            } catch (error) {
+                throw 'Maintenance';
+            }
+        }
+
         processCreateUser(state, cmd);
         processCreateGroup(state, cmd);
         processAddUserToGroup(state, cmd);
@@ -154,6 +166,9 @@ function processCmd(state, cmd) {
         processChangeGroup(state, cmd);
         processChangePermissions(state, cmd);
         processDeleteThing(state, cmd);
+        processEnterMaintenance(state, cmd);
+        processExitMaintenance(state, cmd);
+        processLog(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -689,6 +704,45 @@ function processDeleteThing(state, { type, pathName, token }) {
     }
 }
 
+function processEnterMaintenance(state, { type, token }) {
+    if (type === 'enterMaintenance') {
+        validateTokenForRoot(token);
+
+        throw {
+            newState: {
+                ...state,
+                mode: 'maintenance'
+            },
+            response: ''
+        };
+    }
+}
+
+function processExitMaintenance(state, { type, token }) {
+    if (type === 'exitMaintenance') {
+        validateTokenForRoot(token);
+
+        throw {
+            newState: {
+                ...state,
+                mode: 'active'
+            },
+            response: ''
+        };
+    }
+}
+
+function processLog(state, { type, token }) {
+    if (type === 'log') {
+        validateTokenForRoot(token);
+
+        throw {
+            newState: state,
+            response: JSON.stringify(state)
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -708,6 +762,9 @@ function parseCmd(txt) {
         parseChangeGroup(txt);
         parseChangePermissions(txt);
         parseDeleteThing(txt);
+        parseEnterMaintenance(txt);
+        parseExitMaintenance(txt);
+        parseLog(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -1013,6 +1070,48 @@ function parseDeleteThing(txt) {
 
         throw {
             cmd: { type: 'deleteThing', pathName, token }
+        };
+    }
+}
+
+function parseEnterMaintenance(txt) {
+    if (txt.startsWith('enterMaintenance')) {
+        let [_, token] = txt.split(' ');
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'enterMaintenance', token }
+        };
+    }
+}
+
+function parseExitMaintenance(txt) {
+    if (txt.startsWith('exitMaintenance')) {
+        let [_, token] = txt.split(' ');
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'exitMaintenance', token }
+        };
+    }
+}
+
+function parseLog(txt) {
+    if (txt.startsWith('log')) {
+        let [_, token] = txt.split(' ');
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'log', token }
         };
     }
 }
