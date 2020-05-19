@@ -13,7 +13,7 @@ function main() {
             let txt = (data.toString('utf8').trim());
 
             if (txt.startsWith(id)) {
-                console.log(txt);
+                console.log(txt.replace(`${id} `, ''));
             }
         });
 
