@@ -95,6 +95,10 @@ function main() {
         state = JSON.parse(fs.readFileSync('./db.json', 'utf8'));
     } catch (error) {
         if (error.code === 'ENOENT') {
+            if (config.buildQuery) {
+                state = processCmds(state, cmds).newState;
+            }
+
             fs.writeFileSync('./db.json', JSON.stringify(state), 'utf8');
         } else {
             throw error;
