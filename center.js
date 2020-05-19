@@ -4,7 +4,7 @@ const net = require('net');
 
 let clients = [];
 
-const cdb = spawn('node', ['.']);
+const cdb = spawn('node', ['cristinadb']);
 
 const server = net.createServer((socket) => {
     socket.on('data', (data) => {
