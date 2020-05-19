@@ -56,6 +56,8 @@
 
 const crypto = require('crypto');
 
+const config = require('./config');
+
 function hash(value) {
     const h = crypto.createHash('sha256');
     h.update(value);
@@ -90,10 +92,12 @@ function main() {
     process.stdin.on('data', (txt) => {
         let [sockId, ...rest] = txt.trim().split(' ');
 
-        if (sockId === 'log') {
-            console.log();
-            console.log(JSON.stringify(state, null, 4));
-            console.log();
+        if (rest[0] === 'log') {
+            if (config.environment === 'DEBUG') {
+                console.log(`${sockId} ${JSON.stringify(state)}`);
+            } else {
+                console.log(`${sockId} NOK Invalid command`);
+            }
         } else {
             try {
                 let cmds = parseCmds(rest.join(' '));
