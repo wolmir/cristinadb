@@ -113,7 +113,19 @@ function main() {
 
             console.log(`${sockId} OK ${response}`);
         } catch (err) {
-            console.log(`${sockId} NOK ${err}`);
+            if (err === 'Reset') {
+                try {
+                    state = JSON.parse(fs.readFileSync('./db.json', 'utf8'));
+                } catch (error) {
+                    if (error.code === 'ENOENT') {
+                        fs.writeFileSync('./db.json', JSON.stringify(state), 'utf8');
+                    } else {
+                        throw error;
+                    }
+                }
+            } else {
+                console.log(`${sockId} NOK ${err}`);
+            }
         }
 
         fs.writeFileSync('./db.json', JSON.stringify(state), 'utf8');
@@ -714,13 +726,7 @@ function processExitMaintenance(state, { type, token }) {
     if (type === 'exitMaintenance') {
         validateTokenForRoot(token);
 
-        throw {
-            newState: {
-                ...state,
-                mode: 'active'
-            },
-            response: ''
-        };
+        throw 'Reset';
     }
 }
 
