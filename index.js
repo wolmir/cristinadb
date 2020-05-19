@@ -104,27 +104,19 @@ function main() {
     process.stdin.on('data', (txt) => {
         let [sockId, ...rest] = txt.trim().split(' ');
 
-        if (rest[0] === 'log') {
-            if (config.environment === 'DEBUG') {
-                console.log(`${sockId} ${JSON.stringify(state)}`);
-            } else {
-                console.log(`${sockId} NOK Invalid command`);
-            }
-        } else {
-            try {
-                let cmds = parseCmds(rest.join(' '));
+        try {
+            let cmds = parseCmds(rest.join(' '));
 
-                let { newState, response } = processCmds(state, cmds);
+            let { newState, response } = processCmds(state, cmds);
 
-                state = newState;
+            state = newState;
 
-                console.log(`${sockId} OK ${response}`);
-            } catch (err) {
-                console.log(`${sockId} NOK ${err}`);
-            }
-
-            fs.writeFileSync('./db.json', JSON.stringify(state), 'utf8');
+            console.log(`${sockId} OK ${response}`);
+        } catch (err) {
+            console.log(`${sockId} NOK ${err}`);
         }
+
+        fs.writeFileSync('./db.json', JSON.stringify(state), 'utf8');
     })
 }
 
