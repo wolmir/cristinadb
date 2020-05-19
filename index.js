@@ -55,6 +55,7 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
 
 const config = require('./config');
 
@@ -89,6 +90,16 @@ function main() {
         }
     };
 
+    try {
+        state = JSON.parse(fs.readFileSync('./db.json', 'utf8'));
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            fs.writeFileSync('./db.json', JSON.stringify(state), 'utf8');
+        } else {
+            throw error;
+        }
+    }
+
     process.stdin.on('data', (txt) => {
         let [sockId, ...rest] = txt.trim().split(' ');
 
@@ -108,6 +119,8 @@ function main() {
             } catch (err) {
                 console.log(`${sockId} NOK ${err}`);
             }
+
+            fs.writeFileSync('./db.json', JSON.stringify(state), 'utf8');
         }
     })
 }
