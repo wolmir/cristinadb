@@ -1,3 +1,4 @@
 module.exports = {
-    environment: 'DEBUG'
+    environment: 'DEBUG',
+    services: []
 };
