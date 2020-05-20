@@ -9,7 +9,7 @@ let websocketd = spawn('./websocketd/websocketd', ['--port=8080', '--staticdir=.
 let services = config.services.map((service) => {
     return {
         name: service.name,
-        proc: spawn(service.name, service.args || [])
+        proc: spawn(`./services/${service.name}`, service.args || [])
     };
 });
 
