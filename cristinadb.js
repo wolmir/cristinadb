@@ -177,6 +177,7 @@ function processCmd(state, cmd) {
         processEnterMaintenance(state, cmd);
         processExitMaintenance(state, cmd);
         processLog(state, cmd);
+        processChangePassword(state, cmd);
     } catch (result) {
         if (result.newState) {
             return result;
@@ -745,6 +746,42 @@ function processLog(state, { type, token }) {
     }
 }
 
+function processChangePassword(state, { type, username, password, confirmPassword, token }) {
+    if (type === 'changePassword') {
+        let user = validateToken(state, token);
+
+        if ((user.username !== 'root') && (user.username !== username)) {
+            throw 'Insufficient permissions';
+        }
+
+        if (password !== confirmPassword) {
+            throw 'Passwords don\'t match';
+        }
+
+        let hashed = hash(password);
+
+        let newState = {
+            ...state,
+            users: state.users
+                .map(u => {
+                    if (u.username === username) {
+                        return {
+                            ...u,
+                            password: hashed
+                        };
+                    }
+
+                    return u;
+                })
+        };
+
+        throw {
+            newState,
+            response: ''
+        };
+    }
+}
+
 function parseCmds(txt) {
     return txt.split('::||::').map((piece) => parseCmd(piece));
 }
@@ -767,6 +804,7 @@ function parseCmd(txt) {
         parseEnterMaintenance(txt);
         parseExitMaintenance(txt);
         parseLog(txt);
+        parseChangePassword(txt);
     } catch (result) {
         if (result.cmd) {
             return result.cmd;
@@ -1114,6 +1152,35 @@ function parseLog(txt) {
 
         throw {
             cmd: { type: 'log', token }
+        };
+    }
+}
+
+//* - changePassword (username) (password) (confirmPassword) (token)
+//* -- Returns OK | NOK "Username doesn't exist" | NOK "Invalid password" | NOK "Passwords don't match"
+//* -- NOK "Invalid token" | NOK "Insufficient permissions"
+function parseChangePassword (txt) {
+    if (txt.startsWith('changePassword')) {
+        let [_, username, password, confirmPassword, token] = txt.split(' ');
+
+        if (!username || !username.length) {
+            throw 'Invalid username'
+        }
+
+        if (!password || !password.length) {
+            throw 'Invalid password'
+        }
+
+        if (!confirmPassword || !confirmPassword.length) {
+            throw 'Invalid password confirmation'
+        }
+
+        if (!token || !token.length) {
+            throw 'Invalid token'
+        }
+
+        throw {
+            cmd: { type: 'changePassword', username, password, confirmPassword, token }
         };
     }
 }
