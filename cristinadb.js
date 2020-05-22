@@ -783,7 +783,7 @@ function processChangePassword(state, { type, username, password, confirmPasswor
 }
 
 function parseCmds(txt) {
-    return txt.split('::||::').map((piece) => parseCmd(piece));
+    return txt.split(config.customSeparator).map((piece) => parseCmd(piece));
 }
 
 function parseCmd(txt) {

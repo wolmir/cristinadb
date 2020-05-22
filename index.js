@@ -4,7 +4,7 @@ const config = require('./config');
 
 let central = spawn('node center.js', []);
 
-let websocketd = spawn('./websocketd/websocketd', ['--port=8080', '--staticdir=./static', './butler.sh']);
+let websocketd = spawn('./websocketd/websocketd', [`--port=${config.websocketdPort}`, '--staticdir=./static', './butler.sh']);
 
 let services = config.services.map((service) => {
     return {

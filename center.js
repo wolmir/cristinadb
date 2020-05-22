@@ -2,6 +2,8 @@ const { spawn } = require('child_process');
 
 const net = require('net');
 
+const config = require('./config');
+
 let clients = [];
 
 const cdb = spawn('node', ['cristinadb']);
@@ -28,7 +30,7 @@ cdb.stdout.on('data', (data) => {
 
 server.listen({
     host: 'localhost',
-    port: 1234
+    port: config.tcpPort
 });
 
 server.on('error', (e) => {
@@ -36,7 +38,7 @@ server.on('error', (e) => {
         console.log('Address in use, retrying...');
         setTimeout(() => {
             server.close();
-            server.listen(PORT, HOST);
+            server.listen(config.tcpPort, 'localhost');
         }, 1000);
     } else {
         console.error(e);
